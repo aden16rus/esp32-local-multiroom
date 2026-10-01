@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Satellite Central Control & Audio Diagnostics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.75);
+            --bg-card-hover: rgba(51, 65, 85, 0.85);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(56, 189, 248, 0.3);
+            
+            --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.25);
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.12) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .brand-text h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .server-status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-green);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .btn-restart {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: var(--accent-amber);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-restart:hover {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: var(--accent-amber);
+            transform: translateY(-1px);
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+        }
+
+        .btn-restart:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .server-status-badge.offline {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: var(--accent-red);
+        }
+
+        .server-status-badge.offline .pulse-dot {
+            background-color: var(--accent-red);
+            box-shadow: 0 0 10px var(--accent-red);
+            animation: none;
+        }
+
+        .server-status-badge.restarting {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: var(--accent-amber);
+        }
+
+        .server-status-badge.restarting .pulse-dot {
+            background-color: var(--accent-amber);
+            box-shadow: 0 0 10px var(--accent-amber);
+            animation: pulse 1s infinite;
+        }
+
+        /* Top Metrics Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-highlight);
+            transform: translateY(-2px);
+        }
+
+        .stat-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--text-main);
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .stat-unit {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-dim);
+        }
+
+        /* Main Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Audio Diagnostics & Player Container */
+        .audio-player-container {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-highlight);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .audio-player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .active-rec-info h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .active-rec-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        canvas#waveformCanvas {
+            width: 100%;
+            height: 90px;
+            background: #090d16;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .player-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .play-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #38bdf8, #0284c7);
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+        }
+
+        .play-btn:hover {
+            transform: scale(1.06);
+            box-shadow: 0 0 24px rgba(56, 189, 248, 0.6);
+        }
+
+        .seek-bar-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        input[type="range"].seek-bar {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1e293b;
+            outline: none;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-dim);
+        }
+
+        /* Metrics Grid for Selected Recording */
+        .metrics-cards-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .metric-mini-box {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .metric-mini-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .metric-mini-value {
+            font-size: 15px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-main);
+        }
+
+        /* Recordings Table */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table.recordings-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        table.recordings-table th {
+            padding: 12px 14px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            letter-spacing: 0.5px;
+        }
+
+        table.recordings-table td {
+            padding: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        table.recordings-table tr {
+            transition: background 0.15s ease;
+            cursor: pointer;
+        }
+
+        table.recordings-table tr:hover {
+            background: var(--bg-card-hover);
+        }
+
+        table.recordings-table tr.active-row {
+            background: rgba(56, 189, 248, 0.12);
+            border-left: 3px solid var(--primary);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-danger  { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .btn-action {
+            padding: 6px 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-action:hover {
+            background: var(--primary);
+            color: #0f172a;
+        }
+
+        /* Sidebar Satellite List */
+        .satellite-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sat-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .sat-area {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Switch Toggle */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #334155;
+            transition: .3s;
+            border-radius: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider-round:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider-round {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+
+        input:checked + .slider-round:before {
+            transform: translateX(20px);
+        }
+
+        /* DSP Slider Range inputs */
+        input[type="range"].dsp-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1e293b;
+            outline: none;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🎙️</div>
+            <div class="brand-text">
+                <h1>Satellite Voice Control Dashboard</h1>
+                <p>Анализ качества сигнала, шумов и распознавания речи</p>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="btn-restart" id="btnRestartServer" onclick="confirmRestartServer()">
+                <span id="restartIcon">🔄</span> <span id="restartText">Перезапустить сервер</span>
+            </button>
+            <div class="server-status-badge" id="serverStatusBadge">
+                <div class="pulse-dot" id="serverPulseDot"></div>
+                <span id="serverStatusText">Сервер активен</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Top Statistics Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-title">Подключенные Сателлиты</div>
+            <div class="stat-value" id="statSatellites">1 <span class="stat-unit">устройств</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Записано Команд</div>
+            <div class="stat-value" id="statRecordings">0 <span class="stat-unit">записей</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Среднее Качество (SNR)</div>
+            <div class="stat-value" id="statAvgSnr">-- <span class="stat-unit">dB</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Движок Распознавания</div>
+            <div class="stat-value" style="font-size: 20px; color: var(--accent-green);">Sherpa-ONNX</div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        
+        <!-- Left Container: Diagnostics & Recordings Table -->
+        <div class="main-content">
+            
+            <!-- Audio Diagnostics & Interactive Player -->
+            <div class="audio-player-container">
+                <div class="audio-player-header">
+                    <div class="active-rec-info">
+                        <h3 id="playerTitle">Выберите аудиозапись для прослушивания</h3>
+                        <div class="active-rec-meta" id="playerMeta">--:--:-- | Сателлит: --</div>
+                    </div>
+                    <div>
+                        <a id="btnDownloadAudio" href="#" download class="btn-action" style="display: none;">Скачать .WAV</a>
+                    </div>
+                </div>
+
+                <!-- Waveform Canvas -->
+                <canvas id="waveformCanvas"></canvas>
+
+                <!-- Audio Element Controls -->
+                <div class="player-controls">
+                    <button class="play-btn" id="btnPlayPause">▶</button>
+                    <div class="seek-bar-container">
+                        <input type="range" class="seek-bar" id="seekBar" min="0" max="100" value="0">
+                        <div class="time-display">
+                            <span id="currTime">00:00</span>
+                            <span id="totalTime">00:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Signal Metrics Row -->
+                <div class="metrics-cards-row">
+                    <div class="metric-mini-box">
+                        <div class="metric-mini-label">Сигнал / Шум (SNR)</div>
+                        <div class="metric-mini-value" id="metricSnr" style="color: var(--primary);">-- dB</div>
+                    </div>
+                    <div class="metric-mini-box">
+                        <div class="metric-mini-label">Уровень RMS</div>
+                        <div class="metric-mini-value" id="metricRms">--</div>
+                    </div>
+                    <div class="metric-mini-box">
+                        <div class="metric-mini-label">Пиковая амплитуда</div>
+                        <div class="metric-mini-value" id="metricPeak">--</div>
+                    </div>
+                    <div class="metric-mini-box">
+                        <div class="metric-mini-label">Шумовой Порог</div>
+                        <div class="metric-mini-value" id="metricNoise">--</div>
+                    </div>
+                    <div class="metric-mini-box">
+                        <div class="metric-mini-label">Оценка Качества</div>
+                        <div class="metric-mini-value" id="metricQuality" style="font-size: 13px;">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table of Recorded Audio Commands -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📁</span> Записанные Аудиофрагменты Команд
+                    </div>
+                    <button class="btn-action" onclick="fetchRecordings()">Обновить</button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="recordings-table">
+                        <thead>
+                            <tr>
+                                <th>Время</th>
+                                <th>Устройство</th>
+                                <th>Распознанная Команда (STT)</th>
+                                <th>Ответ HA</th>
+                                <th>SNR</th>
+                                <th>Качество / Шум</th>
+                                <th>Длит.</th>
+                                <th>Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordingsTableBody">
+                            <tr>
+                                <td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                                    Записей пока нет. Произнесите команду на сателлите!
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Container: Satellites & Live Info -->
+        <div class="sidebar">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📡</span> Активные Сателлиты
+                    </div>
+                </div>
+                
+                <div id="satellitesList">
+                    <div class="satellite-card">
+                        <div>
+                            <div class="sat-name">esp32_satellite_bedroom</div>
+                            <div class="sat-area">Комната (Bedroom)</div>
+                        </div>
+                        <span class="badge badge-success">В сети</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DSP Audio Enhancement & Arbitration Settings Panel -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>🎛️</span> Шумоподавление, Усиление и Арбитраж
+                    </div>
+                    <button class="btn-action" onclick="fetchAudioSettings()">Сбросить</button>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 18px; padding: 4px 0;">
+                    
+                    <!-- Toggle Denoise -->
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--text-main);">Шумоподавление (Denoise)</div>
+                            <div style="font-size: 11px; color: var(--text-muted);">Фильтр 80 Гц + подавление шумов паузы</div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="dspDenoiseToggle" onchange="applyAudioSettings()">
+                            <span class="slider-round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Noise Suppression Level Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Подавление шума</span>
+                            <span id="dspNoiseLevelVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">0.85 (Средняя)</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspNoiseLevelSlider" min="0.30" max="1.00" step="0.05" value="0.85" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>Агрессивная (0.3)</span>
+                            <span>Мягкая (1.0)</span>
+                        </div>
+                    </div>
+
+                    <!-- Gain Boost Multiplier Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Усиление микрофона (Gain Boost)</span>
+                            <span id="dspGainVal" style="color: var(--accent-green); font-family: 'JetBrains Mono', monospace;">1.0x (0 dB)</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspGainSlider" min="0.50" max="4.00" step="0.10" value="1.00" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0.5x (-6 dB)</span>
+                            <span>1.0x</span>
+                            <span>4.0x (+12 dB)</span>
+                        </div>
+                    </div>
+
+                    <!-- AGC Target Speech RMS Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Целевая громкость речи (AGC RMS)</span>
+                            <span id="dspRmsVal" style="color: var(--accent-amber); font-family: 'JetBrains Mono', monospace;">3500</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspRmsSlider" min="1000" max="8000" step="250" value="3500" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>Тихо (1000)</span>
+                            <span>Стандарт (3500)</span>
+                            <span>Громко (8000)</span>
+                        </div>
+                    </div>
+
+                    <!-- HPF Cutoff Frequency Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Частота среза ФВЧ (HPF Cutoff)</span>
+                            <span id="dspHpfVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">80 Гц</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspHpfSlider" min="20" max="300" step="5" value="80" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>20 Гц (Глубокий басс)</span>
+                            <span>80 Гц (Стандарт)</span>
+                            <span>300 Гц (Голосовой)</span>
+                        </div>
+                    </div>
+
+                    <!-- AGC Max Gain Clamp Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Макс. усиление AGC (Max Gain)</span>
+                            <span id="dspAgcMaxGainVal" style="color: var(--accent-green); font-family: 'JetBrains Mono', monospace;">8.0x</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspAgcMaxGainSlider" min="1.0" max="20.0" step="0.5" value="8.0" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>1.0x (Без усиления)</span>
+                            <span>8.0x (Стандарт)</span>
+                            <span>20.0x (Максимум)</span>
+                        </div>
+                    </div>
+
+                    <!-- Server VAD Silence Duration Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Таймаут тишины VAD (Silence MS)</span>
+                            <span id="dspVadSilenceVal" style="color: var(--accent-purple); font-family: 'JetBrains Mono', monospace;">800 мс</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspVadSilenceSlider" min="200" max="3000" step="50" value="800" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>200 мс (Быстрый)</span>
+                            <span>800 мс</span>
+                            <span>3000 мс (Длинная пауза)</span>
+                        </div>
+                    </div>
+
+                    <!-- Server VAD Speech Probability Threshold Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Порог порога VAD (Speech Threshold)</span>
+                            <span id="dspVadThreshVal" style="color: var(--accent-amber); font-family: 'JetBrains Mono', monospace;">0.50</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspVadThreshSlider" min="0.10" max="0.90" step="0.05" value="0.50" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0.10 (Чувствительный)</span>
+                            <span>0.50</span>
+                            <span>0.90 (Строгий)</span>
+                        </div>
+                    </div>
+
+                    <!-- Arbiter Window MS Slider -->
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 4px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Окно арбитража сателлитов (Window MS)</span>
+                            <span id="dspArbiterWinVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">400 мс</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspArbiterWinSlider" min="100" max="1500" step="50" value="400" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>Быстро (100 мс)</span>
+                            <span>Стандарт (400 мс)</span>
+                            <span>Медленно (1500 мс)</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                            Интервал ожидания сообщений от других сателлитов для выбора наилучшего по громкости (RMS)
+                        </div>
+                    </div>
+
+                    <!-- Arbiter Cooldown Sec Slider -->
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 4px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Пауза блокировки после арбитража (Cooldown Sec)</span>
+                            <span id="dspArbiterCooldownVal" style="color: var(--accent-amber); font-family: 'JetBrains Mono', monospace;">1.50 сек</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="dspArbiterCooldownSlider" min="0.0" max="5.0" step="0.25" value="1.50" oninput="updateDspLabels()" onchange="applyAudioSettings()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0.0 сек (Без паузы)</span>
+                            <span>1.5 сек (Стандарт)</span>
+                            <span>5.0 сек (Длинная)</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                            Время блокировки повторных срабатываний после обработки команды
+                        </div>
+                    </div>
+
+                    <div id="dspToast" style="display: none; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        ✓ Настройки DSP и Арбитража сохранены
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Real-time Audio Stream Debugging & Live Listening Panel -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>🎧</span> Отладка Потока и Live Прослушивание
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+                    
+                    <!-- Satellite Selector -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">Выберите сателлит для отладки:</label>
+                        <select id="debugSatSelect" class="btn-action" style="width: 100%; text-align: left; padding: 8px 12px; background: rgba(15, 23, 42, 0.8);">
+                            <option value="">Загрузка списка сателлитов...</option>
+                        </select>
+                    </div>
+
+                    <!-- Debug Mode Toggle Button -->
+                    <div style="display: flex; gap: 8px;">
+                        <button id="btnToggleDebugMode" class="btn-action" style="flex: 1; padding: 10px; background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4); color: var(--accent-purple);" onclick="toggleSatelliteDebugMode()">
+                            ⚡ Включить постоянный поток (Debug Mode)
+                        </button>
+                    </div>
+
+                    <!-- Audio Source Selection (RAW vs DSP Cleaned) -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">Канал прослушивания:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="btnSourceCleaned" class="btn-action" style="flex: 1; background: rgba(56, 189, 248, 0.2); border-color: var(--primary);" onclick="setDebugAudioSource('cleaned')">
+                                ✨ Обработанный (DSP)
+                            </button>
+                            <button id="btnSourceRaw" class="btn-action" style="flex: 1;" onclick="setDebugAudioSource('raw')">
+                                🎙️ Исходный (RAW)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Playback Controls -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 10px; border: 1px solid var(--border-color);">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--text-main);" id="liveStatusText">Live Прослушивание отключено</div>
+                            <div style="font-size: 11px; color: var(--text-muted);" id="liveSubText">Нажмите кнопку для запуска WebAudio</div>
+                        </div>
+                        <button id="btnListenLive" class="play-btn" style="width: 40px; height: 40px; font-size: 14px;" onclick="toggleLiveListening()">▶</button>
+                    </div>
+
+                    <!-- Live Stream Oscilloscope Canvas -->
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px; display: flex; justify-content: space-between;">
+                            <span>Осциллограмма Live-потока</span>
+                            <span id="liveFpsBadge" style="font-family: 'JetBrains Mono', monospace;">16 kHz mono</span>
+                        </div>
+                        <canvas id="debugStreamCanvas" width="300" height="60" style="width: 100%; height: 60px; background: #090d16; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);"></canvas>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Satellite Remote NVS Hardware Configuration Panel -->
+            <div class="panel" style="margin-top: 16px;">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>⚙️</span> Настройки Сателлита (NVS Память)
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 0;">
+                    
+                    <!-- Satellite Selector -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">Устройство для конфигурирования:</label>
+                        <select id="satConfigSelect" class="btn-action" style="width: 100%; text-align: left; padding: 8px 12px; background: rgba(15, 23, 42, 0.8);" onchange="populateSatConfigForm()">
+                            <option value="">Выберите сателлит...</option>
+                        </select>
+                    </div>
+
+                    <!-- Area ID Input -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Локация / Помещение (Area ID):</label>
+                        <input type="text" id="satAreaInput" class="btn-action" style="width: 100%; text-align: left; padding: 8px; background: rgba(15, 23, 42, 0.8); color: var(--text-main);" placeholder="bedroom">
+                    </div>
+
+                    <!-- Individual Toggles Section -->
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                        <div style="font-size: 13px; font-weight: 700; color: var(--primary);">⚙️ Аппаратные функции и оптимизации (ESP32):</div>
+
+                        <!-- DC Offset Removal Toggle -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">Фильтр DC-смещения (DC Offset Removal)</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">Вычитание постоянной составляющей микрофона</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="satDcRemToggle">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Adaptive Noise Floor Tracking Toggle -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">Адаптивный отслеживатель шума (Noise Floor)</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">Динамическая адаптация к тишине комнаты</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="satNoiseTrToggle">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Mic Gain Active Toggle -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">Усиление микрофона (Mic Gain Active)</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">Применение множителя усиления сигнала</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="satMicGainToggle">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Speaker Volume Active Toggle -->
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">Регулировка громкости динамика</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">Масштабирование громкости TTS через I2S Tx</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="satSpkVolToggle">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Mic Gain Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Усиление микрофона на устройстве</span>
+                            <span id="satMicGainVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">1.00x</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satMicGainSlider" min="0.20" max="4.00" step="0.10" value="1.00" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0.2x (Тихо)</span>
+                            <span>1.0x (Норма)</span>
+                            <span>4.0x (Громко)</span>
+                        </div>
+                    </div>
+
+                    <!-- Speaker Volume Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Громкость динамика</span>
+                            <span id="satSpkVolVal" style="color: var(--accent-green); font-family: 'JetBrains Mono', monospace;">100%</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satSpkVolSlider" min="0.00" max="2.00" step="0.05" value="1.00" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0% (Мут)</span>
+                            <span>100%</span>
+                            <span>200%</span>
+                        </div>
+                    </div>
+
+                    <!-- WakeNet Detection Threshold Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Порог распознавания WakeNet</span>
+                            <span id="satWnThreshVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">Авто (0%)</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satWnThreshSlider" min="0" max="99" step="1" value="0" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0% (По умолчанию)</span>
+                            <span>50%</span>
+                            <span>99% (Строгий)</span>
+                        </div>
+                    </div>
+
+                    <!-- I2S Mic Bit Shift Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Битшифт / Делитель I2S данных</span>
+                            <span id="satMicShiftVal" style="color: var(--accent-amber); font-family: 'JetBrains Mono', monospace;">14 бит</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satMicShiftSlider" min="0" max="24" step="1" value="14" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0 бит</span>
+                            <span>14 бит (SPH0645)</span>
+                            <span>24 бит</span>
+                        </div>
+                    </div>
+
+                    <!-- Max Stream Duration Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Макс. длительность сессии (Stream Max)</span>
+                            <span id="satStreamMaxVal" style="color: var(--accent-purple); font-family: 'JetBrains Mono', monospace;">10000 мс</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satStreamMaxSlider" min="1000" max="60000" step="1000" value="10000" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>1 сек</span>
+                            <span>10 сек</span>
+                            <span>60 сек</span>
+                        </div>
+                    </div>
+
+                    <!-- Silence End Timeout Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Таймаут паузы сателлита (Silence End)</span>
+                            <span id="satSilEndVal" style="color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">1500 мс</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satSilEndSlider" min="200" max="5000" step="100" value="1500" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>200 мс</span>
+                            <span>1500 мс</span>
+                            <span>5000 мс</span>
+                        </div>
+                    </div>
+
+                    <!-- I2S Mic Slot Select -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Слот I2S микрофона (Mic Slot):</label>
+                        <select id="satMicSlotSelect" class="btn-action" style="width: 100%; text-align: left; padding: 8px; background: rgba(15, 23, 42, 0.8); color: var(--text-main);">
+                            <option value="-1">Автодетекция (-1)</option>
+                            <option value="0">Левый слот / Left (0)</option>
+                            <option value="1">Правый слот / Right (1)</option>
+                        </select>
+                    </div>
+
+                    <!-- LED Brightness Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Яркость светодиодов</span>
+                            <span id="satLedBrightVal" style="color: var(--accent-purple); font-family: 'JetBrains Mono', monospace;">255</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satLedBrightSlider" min="0" max="255" step="5" value="255" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>0 (Выкл)</span>
+                            <span>128</span>
+                            <span>255 (Макс)</span>
+                        </div>
+                    </div>
+
+                    <!-- VAD Multiplier Slider -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                            <span style="color: var(--text-main);">Порог порога VAD (Порог шума)</span>
+                            <span id="satVadMultVal" style="color: var(--accent-amber); font-family: 'JetBrains Mono', monospace;">3.5x</span>
+                        </div>
+                        <input type="range" class="dsp-slider" id="satVadMultSlider" min="1.50" max="8.00" step="0.25" value="3.50" oninput="updateSatConfigLabels()">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
+                            <span>1.5x (Чувствительный)</span>
+                            <span>3.5x</span>
+                            <span>8.0x (Шумоустойчивый)</span>
+                        </div>
+                    </div>
+
+                    <!-- Apply Button -->
+                    <button class="btn-action" style="padding: 10px; background: rgba(16, 185, 129, 0.2); border-color: var(--accent-green); color: #34d399; font-weight: 700;" onclick="saveSatelliteConfigToNvs()">
+                        💾 Сохранить настройки в NVS сателлита
+                    </button>
+
+                    <div id="satConfigToast" style="display: none; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        ✓ Настройки отправлены и сохранены в NVS сателлита!
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Hidden HTML5 Audio Element -->
+    <audio id="audioElement" style="display: none;"></audio>
+
+    <script>
+        let currentRecordings = [];
+        let selectedRecordIndex = -1;
+
+        const audioEl = document.getElementById('audioElement');
+        const playBtn = document.getElementById('btnPlayPause');
+        const seekBar = document.getElementById('seekBar');
+        const currTimeEl = document.getElementById('currTime');
+        const totalTimeEl = document.getElementById('totalTime');
+
+        const canvas = document.getElementById('waveformCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        async function fetchRecordings() {
+            try {
+                const res = await fetch('/api/recordings');
+                if (res.ok) {
+                    currentRecordings = await res.json();
+                    renderRecordingsTable();
+                    updateStats();
+                }
+            } catch (err) {
+                console.error("Failed to fetch recordings:", err);
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('statRecordings').innerText = currentRecordings.length;
+            if (currentRecordings.length > 0) {
+                let totalSnr = 0;
+                currentRecordings.forEach(r => totalSnr += (r.metrics ? r.metrics.snr_db : 0));
+                const avgSnr = (totalSnr / currentRecordings.length).toFixed(1);
+                document.getElementById('statAvgSnr').innerText = avgSnr;
+            } else {
+                document.getElementById('statAvgSnr').innerText = "--";
+            }
+        }
+
+        function renderRecordingsTable() {
+            const tbody = document.getElementById('recordingsTableBody');
+            if (currentRecordings.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">Записей пока нет. Произнесите команду на сателлите!</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = currentRecordings.map((rec, index) => {
+                const m = rec.metrics || {};
+                let badgeClass = "badge-success";
+                if (m.snr_db < 10) badgeClass = "badge-warning";
+                if (m.clipping_pct > 2 || m.snr_db < 4) badgeClass = "badge-danger";
+
+                const isSelected = (index === selectedRecordIndex);
+                return `
+                    <tr class="${isSelected ? 'active-row' : ''}" onclick="selectRecording(${index})">
+                        <td style="font-family: 'JetBrains Mono', monospace;">${rec.timestamp.split(' ')[1] || rec.timestamp}</td>
+                        <td style="font-weight: 600;">${rec.device_id}</td>
+                        <td style="color: var(--primary); font-weight: 600;">"${rec.transcribed_text || ''}"</td>
+                        <td style="color: var(--text-muted);">${rec.ha_response || '--'}</td>
+                        <td style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">${m.snr_db || 0} dB</td>
+                        <td><span class="badge ${badgeClass}">${m.quality_label || 'Норма'}</span></td>
+                        <td style="font-family: 'JetBrains Mono', monospace;">${rec.duration_sec}s</td>
+                        <td>
+                            <button class="btn-action" onclick="event.stopPropagation(); selectAndPlay(${index});">▶ Слушать</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function selectRecording(index) {
+            if (index < 0 || index >= currentRecordings.length) return;
+            selectedRecordIndex = index;
+            renderRecordingsTable();
+
+            const rec = currentRecordings[index];
+            document.getElementById('playerTitle').innerText = `Команда: "${rec.transcribed_text || 'Не распознано'}"`;
+            document.getElementById('playerMeta').innerText = `${rec.timestamp} | Сателлит: ${rec.device_id} (${rec.area_id})`;
+
+            const btnDownload = document.getElementById('btnDownloadAudio');
+            btnDownload.style.display = 'inline-block';
+            btnDownload.href = rec.url;
+
+            const m = rec.metrics || {};
+            document.getElementById('metricSnr').innerText = `${m.snr_db || 0} dB`;
+            document.getElementById('metricRms').innerText = m.rms || 0;
+            document.getElementById('metricPeak').innerText = m.peak || 0;
+            document.getElementById('metricNoise').innerText = m.noise_floor || 0;
+            document.getElementById('metricQuality').innerText = m.quality_label || '--';
+
+            audioEl.src = rec.url;
+            drawWaveformSimulated(m);
+        }
+
+        function selectAndPlay(index) {
+            selectRecording(index);
+            audioEl.play();
+            playBtn.innerText = '⏸';
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (!audioEl.src) return;
+            if (audioEl.paused) {
+                audioEl.play();
+                playBtn.innerText = '⏸';
+            } else {
+                audioEl.pause();
+                playBtn.innerText = '▶';
+            }
+        });
+
+        audioEl.addEventListener('timeupdate', () => {
+            currTimeEl.innerText = formatTime(audioEl.currentTime);
+            totalTimeEl.innerText = formatTime(audioEl.duration);
+            if (audioEl.duration) {
+                seekBar.value = (audioEl.currentTime / audioEl.duration) * 100;
+            }
+        });
+
+        audioEl.addEventListener('ended', () => {
+            playBtn.innerText = '▶';
+            seekBar.value = 0;
+        });
+
+        seekBar.addEventListener('input', () => {
+            if (audioEl.duration) {
+                audioEl.currentTime = (seekBar.value / 100) * audioEl.duration;
+            }
+        });
+
+        function drawWaveformSimulated(metrics) {
+            canvas.width = canvas.clientWidth * window.devicePixelRatio;
+            canvas.height = canvas.clientHeight * window.devicePixelRatio;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const bars = 100;
+            const barWidth = canvas.width / bars;
+            const centerY = canvas.height / 2;
+
+            for (let i = 0; i < bars; i++) {
+                const amp = Math.sin(i * 0.1) * Math.cos(i * 0.05);
+                const height = (Math.abs(amp) * 0.7 + 0.1) * canvas.height * 0.8;
+                
+                const grad = ctx.createLinearGradient(0, centerY - height/2, 0, centerY + height/2);
+                grad.addColorStop(0, '#38bdf8');
+                grad.addColorStop(1, '#818cf8');
+                
+                ctx.fillStyle = grad;
+                ctx.fillRect(i * barWidth + 1, centerY - height / 2, barWidth - 2, height);
+            }
+        }
+
+        // Live WebSocket updates from Server
+        function connectLiveWs() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            const socket = new WebSocket(wsUrl);
+
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.event === 'new_recording') {
+                        currentRecordings.unshift(data.recording);
+                        renderRecordingsTable();
+                        updateStats();
+                    } else if (data.event === 'debug_audio') {
+                        const selectedSat = document.getElementById('debugSatSelect').value;
+                        if (!selectedSat || selectedSat === data.device_id) {
+                            const pcmToPlay = (debugAudioChannel === 'cleaned') ? data.cleaned_pcm : data.raw_pcm;
+                            playDebugPcmFrame(pcmToPlay);
+                        }
+                    }
+                } catch (e) {}
+            };
+
+            socket.onclose = () => {
+                setTimeout(connectLiveWs, 3000);
+            };
+        }
+
+        // Restart Server Action
+        async function confirmRestartServer() {
+            if (!confirm("Вы действительно хотите перезапустить сервер голосового ассистента?")) {
+                return;
+            }
+
+            const restartBtn = document.getElementById('btnRestartServer');
+            const restartText = document.getElementById('restartText');
+            const restartIcon = document.getElementById('restartIcon');
+            const statusBadge = document.getElementById('serverStatusBadge');
+            const statusText = document.getElementById('serverStatusText');
+
+            restartBtn.disabled = true;
+            restartText.innerText = 'Перезапуск...';
+            restartIcon.style.animation = 'spin 1s linear infinite';
+            
+            statusBadge.className = 'server-status-badge restarting';
+            statusText.innerText = 'Перезапускается...';
+
+            try {
+                const res = await fetch('/api/restart', { method: 'POST' });
+                if (res.ok) {
+                    console.log("Server restart request accepted.");
+                }
+            } catch (err) {
+                console.warn("Server restarting, network connection reset.");
+            }
+
+            // Poll server status until it comes back online
+            let retries = 0;
+            const pollInterval = setInterval(async () => {
+                retries++;
+                try {
+                    const check = await fetch('/api/recordings', { cache: 'no-store' });
+                    if (check.ok) {
+                        clearInterval(pollInterval);
+                        statusBadge.className = 'server-status-badge';
+                        statusText.innerText = 'Сервер активен';
+                        restartBtn.disabled = false;
+                        restartText.innerText = 'Перезапустить сервер';
+                        restartIcon.style.animation = 'none';
+                        fetchRecordings();
+                    }
+                } catch (e) {
+                    if (retries > 30) {
+                        clearInterval(pollInterval);
+                        statusBadge.className = 'server-status-badge offline';
+                        statusText.innerText = 'Ошибка соединения';
+                        restartBtn.disabled = false;
+                        restartText.innerText = 'Повторить перезапуск';
+                        restartIcon.style.animation = 'none';
+                    }
+                }
+            }, 1000);
+        }
+
+        // DSP Audio Processing & Arbiter Settings
+        async function fetchAudioSettings() {
+            try {
+                const res = await fetch('/api/audio_settings');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('dspDenoiseToggle').checked = !!data.denoise_enabled;
+                    document.getElementById('dspNoiseLevelSlider').value = data.noise_suppression_level ?? 0.85;
+                    document.getElementById('dspGainSlider').value = data.gain_multiplier ?? 1.0;
+                    document.getElementById('dspRmsSlider').value = data.target_speech_rms ?? 3500;
+                    document.getElementById('dspHpfSlider').value = data.hpf_cutoff_hz ?? 80;
+                    document.getElementById('dspAgcMaxGainSlider').value = data.agc_max_gain ?? 8.0;
+                    document.getElementById('dspVadSilenceSlider').value = data.vad_silence_ms ?? 800;
+                    document.getElementById('dspVadThreshSlider').value = data.vad_threshold ?? 0.50;
+                    document.getElementById('dspArbiterWinSlider').value = data.arbiter_window_ms ?? 400;
+                    document.getElementById('dspArbiterCooldownSlider').value = data.arbiter_cooldown_sec ?? 1.5;
+                    updateDspLabels();
+                }
+            } catch (e) {
+                console.error("Failed to fetch audio & arbiter settings:", e);
+            }
+        }
+
+        function updateDspLabels() {
+            const denoiseVal = parseFloat(document.getElementById('dspNoiseLevelSlider').value);
+            const gainVal = parseFloat(document.getElementById('dspGainSlider').value);
+            const rmsVal = parseInt(document.getElementById('dspRmsSlider').value);
+            const hpfVal = parseInt(document.getElementById('dspHpfSlider').value);
+            const agcMaxVal = parseFloat(document.getElementById('dspAgcMaxGainSlider').value);
+            const vadSilenceVal = parseInt(document.getElementById('dspVadSilenceSlider').value);
+            const vadThreshVal = parseFloat(document.getElementById('dspVadThreshSlider').value);
+            const arbiterWinVal = parseInt(document.getElementById('dspArbiterWinSlider').value);
+            const arbiterCooldownVal = parseFloat(document.getElementById('dspArbiterCooldownSlider').value);
+
+            let noiseDesc = "Средняя";
+            if (denoiseVal <= 0.5) noiseDesc = "Агрессивная";
+            else if (denoiseVal >= 0.95) noiseDesc = "Мягкая";
+
+            document.getElementById('dspNoiseLevelVal').textContent = `${denoiseVal.toFixed(2)} (${noiseDesc})`;
+            
+            const dbGain = (20 * Math.log10(gainVal)).toFixed(1);
+            const dbSign = dbGain >= 0 ? `+${dbGain}` : dbGain;
+            document.getElementById('dspGainVal').textContent = `${gainVal.toFixed(1)}x (${dbSign} dB)`;
+            document.getElementById('dspRmsVal').textContent = rmsVal;
+            document.getElementById('dspHpfVal').textContent = `${hpfVal} Гц`;
+            document.getElementById('dspAgcMaxGainVal').textContent = `${agcMaxVal.toFixed(1)}x`;
+            document.getElementById('dspVadSilenceVal').textContent = `${vadSilenceVal} мс`;
+            document.getElementById('dspVadThreshVal').textContent = vadThreshVal.toFixed(2);
+            document.getElementById('dspArbiterWinVal').textContent = `${arbiterWinVal} мс`;
+            document.getElementById('dspArbiterCooldownVal').textContent = `${arbiterCooldownVal.toFixed(2)} сек`;
+        }
+
+        async function applyAudioSettings() {
+            const settings = {
+                denoise_enabled: document.getElementById('dspDenoiseToggle').checked,
+                noise_suppression_level: parseFloat(document.getElementById('dspNoiseLevelSlider').value),
+                gain_multiplier: parseFloat(document.getElementById('dspGainSlider').value),
+                target_speech_rms: parseFloat(document.getElementById('dspRmsSlider').value),
+                hpf_cutoff_hz: parseFloat(document.getElementById('dspHpfSlider').value),
+                agc_max_gain: parseFloat(document.getElementById('dspAgcMaxGainSlider').value),
+                vad_silence_ms: parseInt(document.getElementById('dspVadSilenceSlider').value),
+                vad_threshold: parseFloat(document.getElementById('dspVadThreshSlider').value),
+                arbiter_window_ms: parseFloat(document.getElementById('dspArbiterWinSlider').value),
+                arbiter_cooldown_sec: parseFloat(document.getElementById('dspArbiterCooldownSlider').value)
+            };
+
+            try {
+                const res = await fetch('/api/audio_settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                if (res.ok) {
+                    const toast = document.getElementById('dspToast');
+                    toast.style.display = 'block';
+                    setTimeout(() => { toast.style.display = 'none'; }, 2500);
+                }
+            } catch (e) {
+                console.error("Failed to apply audio & arbiter settings:", e);
+            }
+        }
+
+        // =====================================================================
+        // Satellite Debug Stream & Live WebAudio Player
+        // =====================================================================
+        let audioCtx = null;
+        let isLiveListening = false;
+        let debugAudioChannel = 'cleaned'; // 'cleaned' or 'raw'
+        let connectedSatellitesList = [];
+
+        async function fetchSatellites() {
+            try {
+                const res = await fetch('/api/satellites');
+                if (res.ok) {
+                    connectedSatellitesList = await res.json();
+                    renderSatellites();
+                }
+            } catch (e) {
+                console.error("Failed to fetch satellites:", e);
+            }
+        }
+
+        function renderSatellites() {
+            const listEl = document.getElementById('satellitesList');
+            const debugSelect = document.getElementById('debugSatSelect');
+            const configSelect = document.getElementById('satConfigSelect');
+
+            if (!listEl || !debugSelect || !configSelect) return;
+            const currentDebugSel = debugSelect.value;
+            const currentCfgSel = configSelect.value;
+
+            document.getElementById('statSatellites').innerHTML = `${connectedSatellitesList.length} <span class="stat-unit">устройств</span>`;
+
+            if (connectedSatellitesList.length === 0) {
+                listEl.innerHTML = `
+                    <div class="satellite-card">
+                        <div>
+                            <div class="sat-name">Нет подключенных сателлитов</div>
+                            <div class="sat-area">Ожидание подключения по WS</div>
+                        </div>
+                        <span class="badge badge-warning">Офлайн</span>
+                    </div>
+                `;
+                debugSelect.innerHTML = `<option value="">Нет подключенных сателлитов</option>`;
+                configSelect.innerHTML = `<option value="">Нет подключенных сателлитов</option>`;
+                return;
+            }
+
+            listEl.innerHTML = connectedSatellitesList.map(sat => `
+                <div class="satellite-card">
+                    <div>
+                        <div class="sat-name">${sat.device_id}</div>
+                        <div class="sat-area">Помещение: ${sat.area_id} | Gain: ${(sat.mic_gain || 1).toFixed(1)}x</div>
+                    </div>
+                    <span class="badge ${sat.debug_mode ? 'badge-warning' : 'badge-success'}">
+                        ${sat.debug_mode ? '⚡ Отладка' : 'В сети'}
+                    </span>
+                </div>
+            `).join('');
+
+            const optionsHtml = connectedSatellitesList.map(sat => `
+                <option value="${sat.device_id}">
+                    ${sat.device_id} (${sat.area_id}) ${sat.debug_mode ? '[DEBUG ON]' : ''}
+                </option>
+            `).join('');
+
+            debugSelect.innerHTML = optionsHtml;
+            configSelect.innerHTML = optionsHtml;
+
+            if (currentDebugSel) debugSelect.value = currentDebugSel;
+            if (currentCfgSel) configSelect.value = currentCfgSel;
+
+            updateDebugButtonLabel();
+            populateSatConfigForm();
+        }
+
+        function populateSatConfigForm() {
+            const selectEl = document.getElementById('satConfigSelect');
+            if (!selectEl) return;
+            const selectedId = selectEl.value;
+            const sat = connectedSatellitesList.find(s => s.device_id === selectedId);
+            if (!sat) return;
+
+            document.getElementById('satAreaInput').value = sat.area_id || '';
+            document.getElementById('satDcRemToggle').checked = sat.dc_removal_enabled ?? true;
+            document.getElementById('satNoiseTrToggle').checked = sat.noise_tracking_enabled ?? true;
+            document.getElementById('satMicGainToggle').checked = sat.mic_gain_enabled ?? true;
+            document.getElementById('satSpkVolToggle').checked = sat.speaker_volume_enabled ?? true;
+            document.getElementById('satMicGainSlider').value = sat.mic_gain ?? 1.0;
+            document.getElementById('satSpkVolSlider').value = sat.speaker_volume ?? 1.0;
+            document.getElementById('satLedBrightSlider').value = sat.led_brightness ?? 255;
+            document.getElementById('satVadMultSlider').value = sat.vad_multiplier ?? 3.5;
+            document.getElementById('satWnThreshSlider').value = sat.wakenet_threshold ?? 0;
+            document.getElementById('satMicShiftSlider').value = sat.mic_shift ?? 14;
+            document.getElementById('satStreamMaxSlider').value = sat.stream_max_ms ?? 10000;
+            document.getElementById('satSilEndSlider').value = sat.stream_silence_end_ms ?? 1500;
+            document.getElementById('satMicSlotSelect').value = sat.mic_slot ?? -1;
+            updateSatConfigLabels();
+        }
+
+        function updateSatConfigLabels() {
+            const micGain = parseFloat(document.getElementById('satMicGainSlider').value).toFixed(2);
+            const spkVol = Math.round(parseFloat(document.getElementById('satSpkVolSlider').value) * 100);
+            const ledBright = parseInt(document.getElementById('satLedBrightSlider').value);
+            const vadMult = parseFloat(document.getElementById('satVadMultSlider').value).toFixed(2);
+            const wnThresh = parseInt(document.getElementById('satWnThreshSlider').value);
+            const micShift = parseInt(document.getElementById('satMicShiftSlider').value);
+            const strMax = parseInt(document.getElementById('satStreamMaxSlider').value);
+            const silEnd = parseInt(document.getElementById('satSilEndSlider').value);
+
+            document.getElementById('satMicGainVal').textContent = `${micGain}x`;
+            document.getElementById('satSpkVolVal').textContent = `${spkVol}%`;
+            document.getElementById('satLedBrightVal').textContent = ledBright;
+            document.getElementById('satVadMultVal').textContent = `${vadMult}x`;
+            document.getElementById('satWnThreshVal').textContent = wnThresh > 0 ? `${wnThresh}%` : 'Авто (0%)';
+            document.getElementById('satMicShiftVal').textContent = `${micShift} бит`;
+            document.getElementById('satStreamMaxVal').textContent = `${strMax} мс`;
+            document.getElementById('satSilEndVal').textContent = `${silEnd} мс`;
+        }
+
+        async function saveSatelliteConfigToNvs() {
+            const selectEl = document.getElementById('satConfigSelect');
+            const deviceId = selectEl.value;
+            if (!deviceId) {
+                alert("Пожалуйста, выберите сателлит для сохранения настроек!");
+                return;
+            }
+
+            const payload = {
+                device_id: deviceId,
+                config: {
+                    area_id: document.getElementById('satAreaInput').value.trim() || 'default',
+                    dc_removal_enabled: document.getElementById('satDcRemToggle').checked,
+                    noise_tracking_enabled: document.getElementById('satNoiseTrToggle').checked,
+                    mic_gain_enabled: document.getElementById('satMicGainToggle').checked,
+                    speaker_volume_enabled: document.getElementById('satSpkVolToggle').checked,
+                    mic_gain: parseFloat(document.getElementById('satMicGainSlider').value),
+                    speaker_volume: parseFloat(document.getElementById('satSpkVolSlider').value),
+                    led_brightness: parseInt(document.getElementById('satLedBrightSlider').value),
+                    vad_multiplier: parseFloat(document.getElementById('satVadMultSlider').value),
+                    wakenet_threshold: parseInt(document.getElementById('satWnThreshSlider').value),
+                    mic_shift: parseInt(document.getElementById('satMicShiftSlider').value),
+                    stream_max_ms: parseInt(document.getElementById('satStreamMaxSlider').value),
+                    stream_silence_end_ms: parseInt(document.getElementById('satSilEndSlider').value),
+                    mic_slot: parseInt(document.getElementById('satMicSlotSelect').value)
+                }
+            };
+
+            try {
+                const res = await fetch('/api/satellite/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    const toast = document.getElementById('satConfigToast');
+                    toast.style.display = 'block';
+                    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+                    await fetchSatellites();
+                } else {
+                    const errData = await res.json();
+                    alert(`Ошибка сохранения: ${errData.message || 'Не удалось обновить сателлит'}`);
+                }
+            } catch (e) {
+                console.error("Failed to save satellite config to NVS:", e);
+            }
+        }
+
+        function updateDebugButtonLabel() {
+            const selectEl = document.getElementById('debugSatSelect');
+            const selectedId = selectEl.value;
+            const sat = connectedSatellitesList.find(s => s.device_id === selectedId);
+            const btn = document.getElementById('btnToggleDebugMode');
+            if (!btn) return;
+
+            if (sat && sat.debug_mode) {
+                btn.innerHTML = '⏹ Выключить отладку (Stop Debug)';
+                btn.style.background = 'rgba(239, 68, 68, 0.2)';
+                btn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                btn.style.color = '#f87171';
+            } else {
+                btn.innerHTML = '⚡ Включить постоянный поток (Debug Mode)';
+                btn.style.background = 'rgba(168, 85, 247, 0.15)';
+                btn.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                btn.style.color = 'var(--accent-purple)';
+            }
+        }
+
+        async function toggleSatelliteDebugMode() {
+            const selectEl = document.getElementById('debugSatSelect');
+            const deviceId = selectEl.value;
+            if (!deviceId) {
+                alert("Пожалуйста, выберите сателлит для отладки!");
+                return;
+            }
+
+            const sat = connectedSatellitesList.find(s => s.device_id === deviceId);
+            const isCurrentlyDebug = sat ? sat.debug_mode : false;
+
+            const endpoint = isCurrentlyDebug ? '/api/debug_stream/stop' : '/api/debug_stream/start';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId })
+                });
+                if (res.ok) {
+                    await fetchSatellites();
+                } else {
+                    const errData = await res.json();
+                    alert(`Ошибка: ${errData.message || 'Не удалось переключить режим'}`);
+                }
+            } catch (e) {
+                console.error("Failed to toggle debug mode:", e);
+            }
+        }
+
+        function setDebugAudioSource(source) {
+            debugAudioChannel = source;
+            const btnClean = document.getElementById('btnSourceCleaned');
+            const btnRaw = document.getElementById('btnSourceRaw');
+
+            if (source === 'cleaned') {
+                btnClean.style.background = 'rgba(56, 189, 248, 0.2)';
+                btnClean.style.borderColor = 'var(--primary)';
+                btnRaw.style.background = 'rgba(255, 255, 255, 0.06)';
+                btnRaw.style.borderColor = 'var(--border-color)';
+            } else {
+                btnRaw.style.background = 'rgba(245, 158, 11, 0.2)';
+                btnRaw.style.borderColor = 'var(--accent-amber)';
+                btnClean.style.background = 'rgba(255, 255, 255, 0.06)';
+                btnClean.style.borderColor = 'var(--border-color)';
+            }
+        }
+
+        function initWebAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleLiveListening() {
+            isLiveListening = !isLiveListening;
+            const btn = document.getElementById('btnListenLive');
+            const statusText = document.getElementById('liveStatusText');
+            const subText = document.getElementById('liveSubText');
+
+            if (isLiveListening) {
+                initWebAudioContext();
+                btn.innerText = '⏸';
+                btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                statusText.innerText = 'Live Прослушивание АКТИВНО';
+                statusText.style.color = 'var(--accent-green)';
+                subText.innerText = `Канал: ${debugAudioChannel === 'cleaned' ? 'Обработанный (DSP)' : 'Исходный (RAW)'}`;
+            } else {
+                btn.innerText = '▶';
+                btn.style.background = 'linear-gradient(135deg, #38bdf8, #0284c7)';
+                statusText.innerText = 'Live Прослушивание отключено';
+                statusText.style.color = 'var(--text-main)';
+                subText.innerText = 'Нажмите кнопку для запуска WebAudio';
+            }
+        }
+
+        function playDebugPcmFrame(base64Pcm) {
+            if (!isLiveListening || !base64Pcm) return;
+            initWebAudioContext();
+
+            const binaryStr = atob(base64Pcm);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+
+            const int16Samples = new Int16Array(bytes.buffer);
+            const numSamples = int16Samples.length;
+            if (numSamples === 0) return;
+
+            const audioBuffer = audioCtx.createBuffer(1, numSamples, 16000);
+            const channelData = audioBuffer.getChannelData(0);
+
+            for (let i = 0; i < numSamples; i++) {
+                channelData[i] = int16Samples[i] / 32768.0;
+            }
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioCtx.destination);
+            source.start();
+
+            drawDebugWaveform(channelData);
+        }
+
+        function drawDebugWaveform(floatSamples) {
+            const canvas = document.getElementById('debugStreamCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerY = height / 2;
+
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = debugAudioChannel === 'cleaned' ? '#38bdf8' : '#f59e0b';
+            ctx.beginPath();
+
+            const step = Math.ceil(floatSamples.length / width);
+            for (let i = 0; i < width; i++) {
+                const sampleIndex = i * step;
+                const sampleVal = sampleIndex < floatSamples.length ? floatSamples[sampleIndex] : 0;
+                const y = centerY - (sampleVal * centerY * 0.95);
+                if (i === 0) ctx.moveTo(i, y);
+                else ctx.lineTo(i, y);
+            }
+            ctx.stroke();
+        }
+
+        // Initial Load
+        fetchRecordings();
+        fetchAudioSettings();
+        fetchSatellites();
+        connectLiveWs();
+
+        setInterval(fetchSatellites, 5000);
+    </script>
+</body>
+</html>

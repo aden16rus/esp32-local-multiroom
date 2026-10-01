@@ -1,0 +1,13 @@
+dependencies:
+  idf: ">=5.5"
+
+  # WakeNet (esp-sr) — реальное распознавание wake word.
+  # На ESP32-S3 доступны модели WakeNet9 (wn9_*), включая wn9_alexa.
+  espressif/esp-sr: "^2.0.0"
+
+  # WS2812 / адресный RGB. В ESP-IDF 5.5 драйвер не входит в ядро,
+  # поэтому подключается компонентом из реестра.
+  espressif/led_strip: "^2.5.3"
+
+  # WebSocket-клиент для отправки PCM на локальный сервер распознавания.
+  espressif/esp_websocket_client: "^1.2.0"

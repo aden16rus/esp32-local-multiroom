@@ -1,0 +1,376 @@
+menu "Wake word tester"
+
+    config APP_MIC_BCLK_GPIO
+        int "I2S BCLK GPIO"
+        default 16
+
+    config APP_MIC_WS_GPIO
+        int "I2S WS / LRCLK GPIO"
+        default 15
+
+    config APP_MIC_DIN_GPIO
+        int "I2S DIN GPIO"
+        default 17
+
+    config APP_MIC_SLOT_RIGHT
+        bool "Use right I2S slot (SPH0645 L/R pin high)"
+        default n
+        help
+            Если пин L/R у SPH0645 подключен к 3.3V, включите.
+            Если к GND, оставьте выключенным (будет использоваться left slot).
+
+    config APP_MIC_SLOT_PROBE
+        bool "Measure AC energy of both I2S slots at startup"
+        default y
+        help
+            На старте временно переключает I2S в стерео, считает энергию
+            обоих слотов после снятия постоянной составляющей и печатает
+            результат. Так сразу видно, в каком слоте реально есть звук.
+            Если энергия обоих слотов почти нулевая, микрофон подключен
+            неверно либо не запитан: проверьте VDD, общую землю и распиновку.
+
+    config APP_PHASE_SILENCE_SEC
+        int "Silence phase, s (slow blinking LED)"
+        default 10
+        range 1 600
+        help
+            Длительность фазы, когда нужно молчать.
+
+    config APP_PHASE_SPEAK_SEC
+        int "Speak phase, s (solid LED)"
+        default 10
+        range 1 600
+        help
+            Длительность фазы, когда нужно говорить. Светодиод горит ровно.
+
+    config APP_LED_BLINK_ON_MS
+        int "LED on time during silence phase, ms"
+        default 200
+        range 50 900
+
+    config APP_LED_BLINK_PERIOD_MS
+        int "LED blink period during silence phase, ms"
+        default 1000
+        range 200 5000
+        help
+            Период одного моргания. 1000 мс = ровно одно моргание в секунду.
+
+    config APP_MIC_SHIFT
+        int "Shift raw 32-bit I2S samples right by"
+        default 14
+        range 0 24
+        help
+            SPH0645 обычно дает данные в старших битах 32-битного слота.
+            Если сырой сигнал слишком большой и клиппует, увеличьте значение.
+            Если слишком тихий, уменьшите.
+
+    config APP_DC_REMOVAL
+        bool "Remove DC offset from microphone signal"
+        default y
+        help
+            Однополюсный фильтр верхних частот убирает постоянную
+            составляющую перед подачей в AFE. Нужен, если на линии данных
+            I2S есть большое смещение (частый симптом неверной разводки или
+            не того слота): при смещении -12000 при сигнале ~25 LSB
+            WakeNet не сможет работать в принципе.
+
+    config APP_DC_SHIFT
+        int "DC filter coefficient as right shift"
+        default 7
+        range 1 12
+        help
+            dc += (x - dc) >> N.  Меньше N -> медленнее отслеживает смещение.
+            N=7 дает срез примерно 20 Гц при 16 кГц.
+
+    choice APP_LED_MODE
+        prompt "LED type"
+        default APP_LED_MODE_WS2812
+        help
+            WS2812 (адресный RGB 5050) требует RMT-драйвер и формирует
+            настоящие цвета. Обычный GPIO подходит для дискретного
+            светодиода, подключенного между выводом и землей (или к 3.3V
+            при active low).
+
+        config APP_LED_MODE_WS2812
+            bool "WS2812 addressable RGB (5050)"
+
+        config APP_LED_MODE_GPIO
+            bool "Plain discrete GPIO LED"
+    endchoice
+
+    config APP_LED_GPIO
+        int "LED GPIO"
+        default 48
+        help
+            Для WS2812 это вывод DIN ленты.
+            Укажите -1, чтобы отключить индикацию.
+
+    config APP_LED_COUNT
+        int "Number of WS2812 pixels"
+        default 1
+        range 1 8
+        depends on APP_LED_MODE_WS2812
+
+    config APP_LED_BRIGHTNESS
+        int "WS2812 brightness, 0-255"
+        default 40
+        range 0 255
+        depends on APP_LED_MODE_WS2812
+
+    config APP_LED_INVERT
+        bool "Invert WS2812 data output"
+        default n
+        depends on APP_LED_MODE_WS2812
+
+    config APP_LED_SCAN
+        bool "SCAN MODE: cycle WS2812 over candidate GPIOs to find the real one"
+        default y
+        depends on APP_LED_MODE_WS2812
+        help
+            Номер вывода WS2812 на клонах ESP32-S3 нестандартный, а у
+            WS2812 нет обратной связи — прошивка не может определить,
+            отвечает ли светодиод.
+
+            В этом режиме прошивка по очереди создает ленту на каждом из
+            вероятных выводов и зажигает СВОЙ цвет на 1.5 секунды, печатая
+            соответствие "цвет -> GPIO" в лог. Посмотрите на плату и
+            запомните, какой цвет загорелся. Затем укажите этот GPIO в
+            "LED GPIO" и выключите этот пункт.
+
+            Выводы 15/16/17 (микрофон), 19/20 (USB), 33-37 (PSRAM) и
+            43/44 (консоль) исключены — они не проверяются.
+
+    config APP_LED_ACTIVE_LOW
+        bool "LED active low"
+        default n
+
+    config APP_WAKE_COOLDOWN_MS
+        int "Cooldown after wake event, ms"
+        default 2000
+
+    config APP_DEBUG_PERIOD_MS
+        int "Debug print period, ms"
+        default 100
+        help
+            Периог диагностической строки с RMS. 100 мс удобно, чтобы
+            видеть огибающую сигнала и отличить речь от тишины.
+            Поставьте 1000, если не нужно подробного лога.
+
+    config APP_ARM_COUNTDOWN
+        int "Seconds of countdown before listening starts (0 = off)"
+        default 5
+        range 0 30
+        help
+            После загрузки печатается обратный отсчет и надпись SPEAK NOW.
+            Это точка синхронизации: начните говорить сразу после неё.
+
+menu "Wi-Fi"
+
+    config APP_WIFI_ENABLE
+        bool "Enable Wi-Fi"
+        default y
+
+    config APP_WIFI_SSID
+        string "Wi-Fi SSID"
+        default "myssid"
+        depends on APP_WIFI_ENABLE
+
+    config APP_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default "mypassword"
+        depends on APP_WIFI_ENABLE
+
+    config APP_WIFI_MAX_RETRY
+        int "Join retries before giving up (0 = retry forever)"
+        default 10
+        range 0 1000
+        depends on APP_WIFI_ENABLE
+
+endmenu
+
+menu "PCM streaming"
+
+    config APP_STREAM_ENABLE
+        bool "Stream mic PCM over WebSocket after wake word"
+        default y
+        help
+            При распознавании wake word отправляет на сервер аудио:
+            сначала пре-ролл (последние секунды, включая само слово),
+            затем поток в реальном времени до паузы в речи или лимита.
+
+    config APP_WS_URI
+        string "WebSocket URI of the STT server"
+        default "ws://192.168.1.100:8000/ws"
+        depends on APP_STREAM_ENABLE
+        help
+            Адрес локального сервера распознавания речи, например
+            ws://192.168.1.50:8000/audio
+
+    config APP_STREAM_PREROLL_MS
+        int "Pre-roll before wake word, ms"
+        default 3000
+        range 0 10000
+        depends on APP_STREAM_ENABLE
+        help
+            Сколько аудио отдать ДО момента срабатывания, чтобы сервер
+            услышал само wake word. Хранится в кольцевом буфере в PSRAM.
+
+    config APP_STREAM_MAX_MS
+        int "Maximum stream duration, ms"
+        default 10000
+        range 1000 60000
+        depends on APP_STREAM_ENABLE
+
+    config APP_STREAM_SILENCE_END_MS
+        int "End stream after this much silence, ms"
+        default 1500
+        range 200 10000
+        depends on APP_STREAM_ENABLE
+        help
+            Отслеживается по VAD из AFE. После паузы такой длины поток
+            закрывается, чтобы сервер начал распознавать команду.
+
+    config APP_STREAM_SEND_HEADER
+        bool "Send a JSON header before PCM"
+        default y
+        depends on APP_STREAM_ENABLE
+        help
+            Текстовое сообщение вида {"type":"start","sample_rate":16000,
+            "channels":1,"format":"pcm_s16le"} перед бинарным потоком.
+            Выключите, если сервер ждёт только бинарные кадры.
+
+endmenu
+
+    config APP_DUMP_RAW_SAMPLES
+        bool "Dump first raw I2S samples at startup (wiring diagnostics)"
+        default y
+        help
+            Печатает первые сырые 32-битные значения I2S в hex вместе со
+            средним и размахом. Нужен, чтобы отличить настоящий звук от
+            постоянного смещения, мусора или неверного слота I2S.
+
+    config APP_USE_ESP_SR
+        bool "Use ESP-SR AFE/WakeNet (real wake word recognition)"
+        default y
+        help
+            Включает реальный WakeNet из esp-sr.
+            Требуется компонент esp-sr и прошитая модель в разделе "model".
+
+    if APP_USE_ESP_SR
+
+        config APP_WAKENET_MODEL
+            string "WakeNet model name in flash"
+            default "wn9_alexa"
+            help
+                Имя модели, упакованной в srmodels.bin и записанной в раздел "model".
+                Модель должна быть выбрана в menuconfig -> ESP Speech Recognition,
+                иначе firmware не найдет ее во флеше и упадет в energy-режим.
+
+                Примеры: wn9_alexa, wn10_alexa, wn8_alexa, wn9_hiesp,
+                          wn9_hilexin, wn9_himfive, wn9s_alexa.
+
+        choice APP_AFE_MODE
+            prompt "AFE performance mode"
+            default APP_AFE_HIGH_PERF
+            help
+                HIGH_PERF: выше точность WakeNet, больше CPU.
+                LOW_COST: меньше CPU, ниже точность.
+
+            config APP_AFE_HIGH_PERF
+                bool "High performance (AFE_MODE_HIGH_PERF)"
+
+            config APP_AFE_LOW_COST
+                bool "Low cost (AFE_MODE_LOW_COST)"
+        endchoice
+
+        config APP_AFE_RINGBUF_SIZE
+            int "AFE ring buffer size, frames"
+            default 50
+            range 4 200
+            help
+                Размер кольцевого буфера AFE в кадрах (1 кадр = 512 сэмплов = 32 мс).
+                Увеличение => больше задержка и больше расход RAM.
+                Уменьшите, если AFE падает с "SR_RINGBUF: Memory exhausted".
+
+        choice APP_AFE_MEMORY_MODE
+            prompt "AFE memory allocation mode"
+            default APP_AFE_MEM_PSRAM_BALANCE
+            help
+                На ESP32-S3 внутренней RAM всего ~345 КБ, а WakeNet плюс
+                кольцевые буферы AFE требуют заметно больше. При выборе
+                "More internal RAM" AFE пытается все разместить во внутренней
+                памяти и падает с "SR_RINGBUF: Memory exhausted".
+                Сбалансированный режим отдаст часть буферов в PSRAM, если он
+                включен в конфигурации чипа.
+
+            config APP_AFE_MEM_MORE_INTERNAL
+                bool "More internal RAM (AFE_MEMORY_ALLOC_MORE_INTERNAL)"
+
+            config APP_AFE_MEM_PSRAM_BALANCE
+                bool "Internal RAM + PSRAM balanced (AFE_MEMORY_ALLOC_INTERNAL_PSRAM_BALANCE)"
+
+            config APP_AFE_MEM_MORE_PSRAM
+                bool "More PSRAM (AFE_MEMORY_ALLOC_MORE_PSRAM)"
+        endchoice
+
+        config APP_WAKENET_USE_VAD
+            bool "Enable VAD in AFE"
+            default y
+            help
+                VAD отсекает тишину и шум перед WakeNet, снижает ложные срабатывания.
+                Использует WebRTC VAD (без модели во флеше) либо VADNet,
+                если он выбран в меню ESP Speech Recognition.
+
+        config APP_WAKENET_USE_NS
+            bool "Enable noise suppression in AFE"
+            default n
+            help
+                Выключено по умолчанию. ESP-SR сам предупреждает:
+                "Noise Supression may reduce the accuracy of speech
+                recognition. It is not recommended to turn it on."
+
+                Дополнительно WebRTC NS требует ~24 КБ непрерывной
+                внутренней RAM на каждом канале. На ESP32-S3 без PSRAM
+                это может дать "SR_RINGBUF: Memory exhausted" и падение
+                при создании AFE.
+
+                Включайте только если реально слышите шум и есть PSRAM.
+
+        config APP_WAKENET_THRESHOLD
+            int "WakeNet detection threshold, % (0 = keep model default)"
+            default 0
+            range 0 99
+            help
+                Модель wn9_alexa имеет пороги 0.640 / 0.650.
+                Уменьшите (например 55) если слово плохо распознается,
+                увеличьте (например 75) если много ложных срабатываний.
+                Диапазон, принимаемый API: 0.4 .. 0.9999.
+                0 = использовать порог, зашитый в модель.
+
+        config APP_WAKENET_LOG_WORDS
+            bool "Print wake word list at startup"
+            default y
+
+    endif
+
+    config APP_ENERGY_FALLBACK
+        bool "Fall back to RMS energy detector if ESP-SR fails to init"
+        default y
+        help
+            Если AFE/WakeNet не удалось инициализировать (например, не прошита
+            модель), прошивка не падает, а продолжает работать как обычный
+            энергетический детектор громкости.
+
+    config APP_RMS_THRESHOLD_DB
+        int "Energy threshold, dBFS (energy fallback only)"
+        default -40
+        help
+            Порог для простого энерго-детектора.
+            Типичные значения: -55 ... -30.
+
+    config APP_WAKE_MIN_FRAMES
+        int "Consecutive frames above threshold (energy fallback only)"
+        default 3
+        range 1 50
+
+endmenu

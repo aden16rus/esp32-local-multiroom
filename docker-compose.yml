@@ -1,0 +1,22 @@
+services:
+  voice-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voice-satellite-server
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    env_file:
+      - .env
+    volumes:
+      - ./server:/app/server
+      - ./run_server.py:/app/run_server.py
+      - ./models:/app/models
+      - ./recordings:/app/recordings
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

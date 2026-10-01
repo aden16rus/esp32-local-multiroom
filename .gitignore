@@ -1,0 +1,43 @@
+# ESP-IDF & ESP32 Build Outputs
+firmware/build/
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+*.bin
+!firmware_bin/*.bin
+*.elf
+*.map
+
+# Python Virtual Environments & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.pytest_cache/
+
+# Audio Recordings & Local Data
+recordings/
+recordings/*.wav
+recordings/index.json
+logs/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
+# Downloaded STT Models (managed via scripts/download_stt_models.py)
+models/sherpa-onnx-nemo-transducer-giga-am-v2-russian-2025-04-19/
+models/sherpa-onnx-zipformer-ru-int8-2025-04-20/
+
+scratch/
+
+
+
+
