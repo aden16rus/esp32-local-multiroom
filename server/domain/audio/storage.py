@@ -18,11 +18,13 @@ INDEX_FILE = os.path.join(RECORDINGS_DIR, "index.json")
 
 
 class AudioStore:
-    def __init__(self, storage_dir: str = RECORDINGS_DIR):
+    def __init__(self, storage_dir: str = RECORDINGS_DIR, max_recordings: int = 50):
         self.storage_dir = storage_dir
+        self.max_recordings = max_recordings
         os.makedirs(self.storage_dir, exist_ok=True)
         self.index_file = os.path.join(self.storage_dir, "index.json")
         self.recordings: List[Dict[str, Any]] = self._load_index()
+        self.cleanup_old_recordings(max_keep=self.max_recordings)
 
     def _load_index(self) -> List[Dict[str, Any]]:
         if os.path.exists(self.index_file):
@@ -39,6 +41,49 @@ class AudioStore:
                 json.dump(self.recordings, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving recordings index.json: {e}")
+
+    def cleanup_old_recordings(self, max_keep: int = 50) -> int:
+        """
+        Clean up old recordings beyond max_keep and purge any orphan WAV files from disk.
+        Returns the number of deleted recording files.
+        """
+        deleted_count = 0
+
+        # Trim recordings list to max_keep newest entries
+        if len(self.recordings) > max_keep:
+            to_remove = self.recordings[max_keep:]
+            self.recordings = self.recordings[:max_keep]
+            for entry in to_remove:
+                filename = entry.get("filename")
+                if filename:
+                    file_path = os.path.join(self.storage_dir, filename)
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            deleted_count += 1
+                        except Exception as e:
+                            logger.warning(f"Failed to remove old recording file '{file_path}': {e}")
+
+        # Purge orphan .wav files in storage_dir not present in index
+        valid_filenames = {rec.get("filename") for rec in self.recordings if rec.get("filename")}
+        try:
+            for fname in os.listdir(self.storage_dir):
+                if fname.endswith(".wav") and fname not in valid_filenames:
+                    orphan_path = os.path.join(self.storage_dir, fname)
+                    if os.path.isfile(orphan_path):
+                        try:
+                            os.remove(orphan_path)
+                            deleted_count += 1
+                            logger.info(f"Removed orphan recording file: {fname}")
+                        except Exception as e:
+                            logger.warning(f"Failed to remove orphan file '{orphan_path}': {e}")
+        except Exception as e:
+            logger.error(f"Error scanning for orphan files: {e}")
+
+        self._save_index()
+        if deleted_count > 0:
+            logger.info(f"Cleanup completed: removed {deleted_count} old/orphan recording files. {len(self.recordings)} recordings kept.")
+        return deleted_count
 
     def analyze_pcm_audio(self, pcm_bytes: bytes) -> Dict[str, float]:
         """Analyze 16-bit 16kHz Mono PCM audio for quality metrics."""
@@ -131,9 +176,9 @@ class AudioStore:
         }
 
         self.recordings.insert(0, record_entry)
-        if len(self.recordings) > 100:
+        while len(self.recordings) > self.max_recordings:
             old = self.recordings.pop()
-            old_file = os.path.join(self.storage_dir, old["filename"])
+            old_file = os.path.join(self.storage_dir, old.get("filename", ""))
             if os.path.exists(old_file):
                 try:
                     os.remove(old_file)
@@ -144,7 +189,9 @@ class AudioStore:
         logger.info(f"Saved audio recording '{filename}' (Duration: {duration_sec}s, Quality: '{metrics['quality_label']}', SNR: {metrics['snr_db']} dB)")
         return record_entry
 
-    def get_all_recordings(self) -> List[Dict[str, Any]]:
+    def get_all_recordings(self, limit: Optional[int] = 50) -> List[Dict[str, Any]]:
+        if limit is not None and limit > 0:
+            return self.recordings[:limit]
         return self.recordings
 
     def get_file_path(self, filename: str) -> Optional[str]:

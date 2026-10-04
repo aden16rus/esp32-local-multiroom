@@ -20,7 +20,9 @@ class InitMessage:
     noise_tracking_enabled: bool = True
     mic_gain_enabled: bool = True
     speaker_volume_enabled: bool = True
-    wakenet_threshold: int = 0
+    wakenet_threshold: int = 400
+    wakenet_mode: int = 0
+    cooldown_ms: int = 500
     mic_shift: int = 14
     stream_max_ms: int = 10000
     stream_silence_end_ms: int = 1500
@@ -28,14 +30,20 @@ class InitMessage:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "InitMessage":
-        if data.get("event") != "init":
-            raise ValueError(f"Invalid event type: {data.get('event')}")
-        if "device_id" not in data or "area_id" not in data or "rms" not in data:
-            raise ValueError("Missing required fields in INIT message (device_id, area_id, rms)")
+        msg_type = data.get("event") or data.get("type")
+        if msg_type != "init":
+            raise ValueError(f"Invalid event/type: {msg_type}")
+        if "device_id" not in data or "area_id" not in data:
+            raise ValueError("Missing required fields in INIT message (device_id, area_id)")
+
+        rms_val = data.get("rms")
+        if rms_val is None:
+            rms_val = max(float(data.get("rms_left", 0.0)), float(data.get("rms_right", 0.0)))
+
         return cls(
             device_id=str(data["device_id"]),
             area_id=str(data["area_id"]),
-            rms=float(data["rms"]),
+            rms=float(rms_val),
             mic_gain=float(data.get("mic_gain", 1.0)),
             speaker_volume=float(data.get("speaker_volume", 1.0)),
             led_brightness=int(data.get("led_brightness", 255)),
@@ -44,7 +52,9 @@ class InitMessage:
             noise_tracking_enabled=bool(data.get("noise_tracking_enabled", True)),
             mic_gain_enabled=bool(data.get("mic_gain_enabled", True)),
             speaker_volume_enabled=bool(data.get("speaker_volume_enabled", True)),
-            wakenet_threshold=int(data.get("wakenet_threshold", 0)),
+            wakenet_threshold=int(data.get("wakenet_threshold", 400)),
+            wakenet_mode=int(data.get("wakenet_mode", 0)),
+            cooldown_ms=int(data.get("cooldown_ms", 500)),
             mic_shift=int(data.get("mic_shift", 14)),
             stream_max_ms=int(data.get("stream_max_ms", 10000)),
             stream_silence_end_ms=int(data.get("stream_silence_end_ms", 1500)),
@@ -53,6 +63,7 @@ class InitMessage:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "type": "init",
             "event": "init",
             "device_id": self.device_id,
             "area_id": self.area_id,
@@ -66,6 +77,8 @@ class InitMessage:
             "mic_gain_enabled": self.mic_gain_enabled,
             "speaker_volume_enabled": self.speaker_volume_enabled,
             "wakenet_threshold": self.wakenet_threshold,
+            "wakenet_mode": self.wakenet_mode,
+            "cooldown_ms": self.cooldown_ms,
             "mic_shift": self.mic_shift,
             "stream_max_ms": self.stream_max_ms,
             "stream_silence_end_ms": self.stream_silence_end_ms,
@@ -104,8 +117,10 @@ def parse_incoming_message(data: Union[str, bytes]) -> Union[InitMessage, bytes,
     
     try:
         payload = json.loads(data)
-        if isinstance(payload, dict) and payload.get("event") == "init":
-            return InitMessage.from_dict(payload)
+        if isinstance(payload, dict):
+            msg_type = payload.get("event") or payload.get("type")
+            if msg_type == "init":
+                return InitMessage.from_dict(payload)
         return payload
     except json.JSONDecodeError as e:
         raise ValueError(f"Malformed JSON payload: {data}") from e

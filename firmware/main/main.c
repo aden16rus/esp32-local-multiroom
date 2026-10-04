@@ -62,10 +62,12 @@ static bool  g_noise_tracking_enabled = true;
 static bool  g_mic_gain_enabled       = true;
 static bool  g_speaker_volume_enabled = true;
 
-static int   g_wakenet_threshold      = 0;
+static int   g_wakenet_threshold      = 400; // default 0.40f (400 / 1000.0f)
+static int   g_wakenet_mode           = 2;   // Default 2: DET_MODE_90 (0: DET_MODE_50, 1: DET_MODE_80, 2: DET_MODE_90, 3: DET_MODE_95, 4: DET_MODE_2CH_90, 5: DET_MODE_2CH_95)
 static int   g_mic_shift              = 14;
 static int   g_stream_max_ms          = 10000;
 static int   g_stream_silence_end_ms  = 1500;
+static int   g_cooldown_ms            = 500; // default 500 ms (0.5s)
 static int   g_mic_slot               = -1; // -1: Auto, 0: Left, 1: Right
 
 // Hardware Pinout Configuration (ESP32-S3)
@@ -241,6 +243,8 @@ static void load_nvs_config(void) {
         if (nvs_get_u32(my_handle, "mg_en_u32", &val32) == ESP_OK) g_mic_gain_enabled = (val32 != 0);
         if (nvs_get_u32(my_handle, "spk_en_u32", &val32) == ESP_OK) g_speaker_volume_enabled = (val32 != 0);
         if (nvs_get_u32(my_handle, "wn_thresh", &val32) == ESP_OK) g_wakenet_threshold = (int)val32;
+        if (nvs_get_u32(my_handle, "wn_mode", &val32) == ESP_OK) g_wakenet_mode = (int)val32;
+        if (nvs_get_u32(my_handle, "cool_ms", &val32) == ESP_OK) g_cooldown_ms = (int)val32;
         if (nvs_get_u32(my_handle, "mic_shift", &val32) == ESP_OK) g_mic_shift = (int)val32;
         if (nvs_get_u32(my_handle, "str_max", &val32) == ESP_OK) g_stream_max_ms = (int)val32;
         if (nvs_get_u32(my_handle, "sil_end", &val32) == ESP_OK) g_stream_silence_end_ms = (int)val32;
@@ -251,8 +255,8 @@ static void load_nvs_config(void) {
 
     if (strlen(g_wifi_ssid) > 0 && strlen(g_server_uri) > 0 && strlen(g_device_id) > 0) {
         g_is_provisioned = true;
-        ESP_LOGI(TAG, "NVS Config Loaded: SSID='%s', Server='%s', Device='%s', Area='%s', MicGain=%.2f, SpkVol=%.2f",
-                 g_wifi_ssid, g_server_uri, g_device_id, g_area_id, g_mic_gain, g_speaker_volume);
+        ESP_LOGI(TAG, "NVS Config Loaded: SSID='%s', Server='%s', Device='%s', Area='%s', WNThresh=%d, WNMode=%d, Cooldown=%dms",
+                 g_wifi_ssid, g_server_uri, g_device_id, g_area_id, g_wakenet_threshold, g_wakenet_mode, g_cooldown_ms);
     } else {
         g_is_provisioned = false;
         ESP_LOGW(TAG, "No valid configuration found in NVS! SoftAP Provisioning required.");
@@ -278,6 +282,8 @@ static void save_full_nvs_config(void) {
         nvs_set_u32(my_handle, "mg_en_u32", g_mic_gain_enabled ? 1 : 0);
         nvs_set_u32(my_handle, "spk_en_u32", g_speaker_volume_enabled ? 1 : 0);
         nvs_set_u32(my_handle, "wn_thresh", (uint32_t)g_wakenet_threshold);
+        nvs_set_u32(my_handle, "wn_mode", (uint32_t)g_wakenet_mode);
+        nvs_set_u32(my_handle, "cool_ms", (uint32_t)g_cooldown_ms);
         nvs_set_u32(my_handle, "mic_shift", (uint32_t)g_mic_shift);
         nvs_set_u32(my_handle, "str_max", (uint32_t)g_stream_max_ms);
         nvs_set_u32(my_handle, "sil_end", (uint32_t)g_stream_silence_end_ms);
@@ -542,9 +548,14 @@ static void init_wakenet(void) {
     if (model_name) {
         ESP_LOGI(TAG, "Initializing ESP-SR WakeNet model: '%s'", model_name);
         
+        det_mode_t mode = DET_MODE_90;
+        if (g_wakenet_mode >= 0 && g_wakenet_mode <= 5) {
+            mode = (det_mode_t)g_wakenet_mode;
+        }
+
         afe_config_t *afe_config = afe_config_init("M", models, AFE_TYPE_SR, AFE_MODE_HIGH_PERF);
         if (afe_config) {
-            afe_config->wakenet_mode = DET_MODE_90; // Balanced detection mode (prevents false positives)
+            afe_config->wakenet_mode = mode;
             g_afe_handle = esp_afe_handle_from_config(afe_config);
             if (g_afe_handle) {
                 g_afe_data = g_afe_handle->create_from_config(afe_config);
@@ -552,12 +563,15 @@ static void init_wakenet(void) {
         }
 
         if (g_afe_data) {
-            ESP_LOGI(TAG, "ESP-SR Audio Front-End (AFE) pipeline initialized with NS & DET_MODE_90!");
+            float thresh_float = (g_wakenet_threshold > 10) ? ((float)g_wakenet_threshold / 1000.0f) : (float)g_wakenet_threshold;
+            if (thresh_float <= 0.05f) thresh_float = 0.40f;
+            g_afe_handle->set_wakenet_threshold(g_afe_data, 1, thresh_float);
+            ESP_LOGI(TAG, "ESP-SR Audio Front-End (AFE) pipeline initialized: mode=%d, threshold=%.2f!", (int)mode, thresh_float);
         } else {
             ESP_LOGW(TAG, "AFE init failed. Falling back to direct WakeNet model.");
             g_wakenet = (esp_wn_iface_t *)esp_wn_handle_from_name(model_name);
             if (g_wakenet) {
-                g_wn_model_data = g_wakenet->create(model_name, DET_MODE_90);
+                g_wn_model_data = g_wakenet->create(model_name, mode);
                 if (g_wn_model_data) {
                     g_wn_chunksize = g_wakenet->get_samp_chunksize(g_wn_model_data);
                     ESP_LOGI(TAG, "Direct WakeNet loaded. Chunk size = %d samples", g_wn_chunksize);
@@ -599,6 +613,8 @@ static void send_init_message(float rms) {
     cJSON_AddBoolToObject(init_json, "mic_gain_enabled", g_mic_gain_enabled);
     cJSON_AddBoolToObject(init_json, "speaker_volume_enabled", g_speaker_volume_enabled);
     cJSON_AddNumberToObject(init_json, "wakenet_threshold", g_wakenet_threshold);
+    cJSON_AddNumberToObject(init_json, "wakenet_mode", g_wakenet_mode);
+    cJSON_AddNumberToObject(init_json, "cooldown_ms", g_cooldown_ms);
     cJSON_AddNumberToObject(init_json, "mic_shift", g_mic_shift);
     cJSON_AddNumberToObject(init_json, "stream_max_ms", g_stream_max_ms);
     cJSON_AddNumberToObject(init_json, "stream_silence_end_ms", g_stream_silence_end_ms);
@@ -636,10 +652,10 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
                             g_current_state = STATE_STREAMING;
                             g_led_mode = LED_MODE_STREAMING;
                         } else if (strcmp(action->valuestring, "stop") == 0) {
-                            ESP_LOGI(TAG, "Arbiter Rejected STOP -> Returning to IDLE (cooldown active)");
+                            ESP_LOGI(TAG, "Arbiter Rejected STOP -> Returning to IDLE (cooldown %d ms)", g_cooldown_ms);
                             g_current_state = STATE_IDLE;
                             g_led_mode = LED_MODE_IDLE;
-                            s_cooldown_counter = 30; // 3 second cooldown after rejection
+                            s_cooldown_counter = (g_cooldown_ms + 99) / 100; // Convert ms to 100ms ticks
                         } else if (strcmp(action->valuestring, "start_debug") == 0) {
                             ESP_LOGI(TAG, "Server Command START_DEBUG -> Entering continuous audio stream debug mode");
                             g_current_state = STATE_DEBUG_STREAMING;
@@ -672,8 +688,27 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
                                 if (cJSON_IsBool(mgnen)) g_mic_gain_enabled = cJSON_IsTrue(mgnen);
                                 cJSON *spkvolen = cJSON_GetObjectItem(cfg, "speaker_volume_enabled");
                                 if (cJSON_IsBool(spkvolen)) g_speaker_volume_enabled = cJSON_IsTrue(spkvolen);
+                                
                                 cJSON *wnth = cJSON_GetObjectItem(cfg, "wakenet_threshold");
-                                if (cJSON_IsNumber(wnth)) g_wakenet_threshold = wnth->valueint;
+                                if (cJSON_IsNumber(wnth)) {
+                                    g_wakenet_threshold = wnth->valueint;
+                                    float thresh_float = (g_wakenet_threshold > 10) ? ((float)g_wakenet_threshold / 1000.0f) : (float)g_wakenet_threshold;
+                                    if (g_afe_handle && g_afe_data) {
+                                        g_afe_handle->set_wakenet_threshold(g_afe_data, 1, thresh_float);
+                                        ESP_LOGI(TAG, "Applied Remote WakeNet Threshold: %.2f", thresh_float);
+                                    }
+                                }
+                                cJSON *wnm = cJSON_GetObjectItem(cfg, "wakenet_mode");
+                                if (cJSON_IsNumber(wnm)) {
+                                    g_wakenet_mode = wnm->valueint;
+                                    ESP_LOGI(TAG, "Applied Remote WakeNet Mode: %d", g_wakenet_mode);
+                                }
+                                cJSON *cool = cJSON_GetObjectItem(cfg, "cooldown_ms");
+                                if (cJSON_IsNumber(cool)) {
+                                    g_cooldown_ms = cool->valueint;
+                                    ESP_LOGI(TAG, "Applied Remote Cooldown: %d ms", g_cooldown_ms);
+                                }
+
                                 cJSON *msh = cJSON_GetObjectItem(cfg, "mic_shift");
                                 if (cJSON_IsNumber(msh)) g_mic_shift = msh->valueint;
                                 cJSON *stmax = cJSON_GetObjectItem(cfg, "stream_max_ms");
@@ -684,8 +719,8 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
                                 if (cJSON_IsNumber(midslot)) g_mic_slot = midslot->valueint;
 
                                 save_nvs_config();
-                                ESP_LOGI(TAG, "Applied Remote Config: DCRem=%d, NoiseTr=%d, MicGainEn=%d (%.2f), SpkVolEn=%d (%.2f)",
-                                         g_dc_removal_enabled, g_noise_tracking_enabled, g_mic_gain_enabled, g_mic_gain, g_speaker_volume_enabled, g_speaker_volume);
+                                ESP_LOGI(TAG, "Applied Remote Config: WNThresh=%d, WNMode=%d, Cooldown=%dms, DCRem=%d, NoiseTr=%d",
+                                         g_wakenet_threshold, g_wakenet_mode, g_cooldown_ms, g_dc_removal_enabled, g_noise_tracking_enabled);
                             }
                         }
                     }

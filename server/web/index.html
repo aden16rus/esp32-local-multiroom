@@ -632,7 +632,7 @@
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">
-                        <span>📁</span> Записанные Аудиофрагменты Команд
+                        <span>📁</span> Записанные Аудиофрагменты Команд (Последние 50)
                     </div>
                     <button class="btn-action" onclick="fetchRecordings()">Обновить</button>
                 </div>
@@ -1012,15 +1012,28 @@
                     <!-- WakeNet Detection Threshold Slider -->
                     <div>
                         <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
-                            <span style="color: var(--text-main);">Порог распознавания WakeNet</span>
-                            <span id="satWnThreshVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">Авто (0%)</span>
+                            <span style="color: var(--text-main);">Порог распознавания WakeNet (Threshold)</span>
+                            <span id="satWnThreshVal" style="color: var(--primary); font-family: 'JetBrains Mono', monospace;">0.40</span>
                         </div>
-                        <input type="range" class="dsp-slider" id="satWnThreshSlider" min="0" max="99" step="1" value="0" oninput="updateSatConfigLabels()">
+                        <input type="range" class="dsp-slider" id="satWnThreshSlider" min="0.40" max="0.90" step="0.01" value="0.40" oninput="updateSatConfigLabels()">
                         <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px;">
-                            <span>0% (По умолчанию)</span>
-                            <span>50%</span>
-                            <span>99% (Строгий)</span>
+                            <span>0.40 (Чувствительный)</span>
+                            <span>0.65 (Средний)</span>
+                            <span>0.90 (Строгий)</span>
                         </div>
+                    </div>
+
+                    <!-- WakeNet Mode Select -->
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Режим ESP-SR WakeNet (wakenet_mode / det_mode_t):</label>
+                        <select id="satWnModeSelect" class="btn-action" style="width: 100%; text-align: left; padding: 8px; background: rgba(15, 23, 42, 0.8); color: var(--text-main);">
+                            <option value="0">DET_MODE_50 (0 — 50% порог чувствительности)</option>
+                            <option value="1">DET_MODE_80 (1 — 80% порог чувствительности)</option>
+                            <option value="2">DET_MODE_90 (2 — 90% по умолчанию ESP-SR)</option>
+                            <option value="3">DET_MODE_95 (3 — 95% повышенная строгость)</option>
+                            <option value="4">DET_MODE_2CH_90 (4 — 2-канальный 90%)</option>
+                            <option value="5">DET_MODE_2CH_95 (5 — 2-канальный 95%)</option>
+                        </select>
                     </div>
 
                     <!-- I2S Mic Bit Shift Slider -->
@@ -1143,9 +1156,12 @@
 
         async function fetchRecordings() {
             try {
-                const res = await fetch('/api/recordings');
+                const res = await fetch('/api/recordings?limit=50');
                 if (res.ok) {
                     currentRecordings = await res.json();
+                    if (currentRecordings.length > 50) {
+                        currentRecordings = currentRecordings.slice(0, 50);
+                    }
                     renderRecordingsTable();
                     updateStats();
                 }
@@ -1293,6 +1309,9 @@
                     const data = JSON.parse(event.data);
                     if (data.event === 'new_recording') {
                         currentRecordings.unshift(data.recording);
+                        if (currentRecordings.length > 50) {
+                            currentRecordings.pop();
+                        }
                         renderRecordingsTable();
                         updateStats();
                     } else if (data.event === 'debug_audio') {
@@ -1537,8 +1556,21 @@
             document.getElementById('satMicGainSlider').value = sat.mic_gain ?? 1.0;
             document.getElementById('satSpkVolSlider').value = sat.speaker_volume ?? 1.0;
             document.getElementById('satLedBrightSlider').value = sat.led_brightness ?? 255;
+            document.getElementById('satMicGainToggle').checked = sat.mic_gain_enabled ?? true;
+            document.getElementById('satSpkVolToggle').checked = sat.speaker_volume_enabled ?? true;
+            document.getElementById('satMicGainSlider').value = sat.mic_gain ?? 1.0;
+            document.getElementById('satSpkVolSlider').value = sat.speaker_volume ?? 1.0;
+            document.getElementById('satLedBrightSlider').value = sat.led_brightness ?? 255;
             document.getElementById('satVadMultSlider').value = sat.vad_multiplier ?? 3.5;
-            document.getElementById('satWnThreshSlider').value = sat.wakenet_threshold ?? 0;
+            
+            let rawWn = sat.wakenet_threshold ?? 400;
+            let floatWn = rawWn;
+            if (rawWn > 100) floatWn = rawWn / 1000.0;
+            else if (rawWn > 1) floatWn = rawWn / 100.0;
+            if (floatWn < 0.40 || floatWn > 0.90) floatWn = 0.40;
+            document.getElementById('satWnThreshSlider').value = floatWn.toFixed(2);
+            document.getElementById('satWnModeSelect').value = sat.wakenet_mode ?? 0;
+
             document.getElementById('satMicShiftSlider').value = sat.mic_shift ?? 14;
             document.getElementById('satStreamMaxSlider').value = sat.stream_max_ms ?? 10000;
             document.getElementById('satSilEndSlider').value = sat.stream_silence_end_ms ?? 1500;
@@ -1551,7 +1583,7 @@
             const spkVol = Math.round(parseFloat(document.getElementById('satSpkVolSlider').value) * 100);
             const ledBright = parseInt(document.getElementById('satLedBrightSlider').value);
             const vadMult = parseFloat(document.getElementById('satVadMultSlider').value).toFixed(2);
-            const wnThresh = parseInt(document.getElementById('satWnThreshSlider').value);
+            const wnThresh = parseFloat(document.getElementById('satWnThreshSlider').value).toFixed(2);
             const micShift = parseInt(document.getElementById('satMicShiftSlider').value);
             const strMax = parseInt(document.getElementById('satStreamMaxSlider').value);
             const silEnd = parseInt(document.getElementById('satSilEndSlider').value);
@@ -1560,7 +1592,7 @@
             document.getElementById('satSpkVolVal').textContent = `${spkVol}%`;
             document.getElementById('satLedBrightVal').textContent = ledBright;
             document.getElementById('satVadMultVal').textContent = `${vadMult}x`;
-            document.getElementById('satWnThreshVal').textContent = wnThresh > 0 ? `${wnThresh}%` : 'Авто (0%)';
+            document.getElementById('satWnThreshVal').textContent = wnThresh;
             document.getElementById('satMicShiftVal').textContent = `${micShift} бит`;
             document.getElementById('satStreamMaxVal').textContent = `${strMax} мс`;
             document.getElementById('satSilEndVal').textContent = `${silEnd} мс`;
@@ -1574,6 +1606,9 @@
                 return;
             }
 
+            const floatWn = parseFloat(document.getElementById('satWnThreshSlider').value);
+            const intWn = Math.round(floatWn * 1000);
+
             const payload = {
                 device_id: deviceId,
                 config: {
@@ -1586,7 +1621,8 @@
                     speaker_volume: parseFloat(document.getElementById('satSpkVolSlider').value),
                     led_brightness: parseInt(document.getElementById('satLedBrightSlider').value),
                     vad_multiplier: parseFloat(document.getElementById('satVadMultSlider').value),
-                    wakenet_threshold: parseInt(document.getElementById('satWnThreshSlider').value),
+                    wakenet_threshold: intWn,
+                    wakenet_mode: parseInt(document.getElementById('satWnModeSelect').value),
                     mic_shift: parseInt(document.getElementById('satMicShiftSlider').value),
                     stream_max_ms: parseInt(document.getElementById('satStreamMaxSlider').value),
                     stream_silence_end_ms: parseInt(document.getElementById('satSilEndSlider').value),

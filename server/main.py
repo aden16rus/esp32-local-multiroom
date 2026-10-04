@@ -31,9 +31,10 @@ WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "web"))
 
 
 class AppRunnerAdapter:
-    def __init__(self, runner: web.AppRunner, ha_client: HomeAssistantClient):
+    def __init__(self, runner: web.AppRunner, ha_client: HomeAssistantClient, cleanup_task: Optional[asyncio.Task] = None):
         self._runner = runner
         self._ha_client = ha_client
+        self._cleanup_task = cleanup_task
 
     def close(self):
         try:
@@ -46,6 +47,12 @@ class AppRunnerAdapter:
         pass
 
     async def cleanup(self):
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
         await self._runner.cleanup()
         await self._ha_client.close()
 
@@ -98,6 +105,9 @@ class CentralVoiceServer:
 
         # Web UI browser WebSocket clients
         self.web_ui_clients: Set[web.WebSocketResponse] = set()
+
+        # Background daily cleanup task reference
+        self.cleanup_task: Optional[asyncio.Task] = None
 
     def is_session_active(self) -> bool:
         """Return True if any satellite session is currently active or within post-session lock window."""
@@ -164,7 +174,11 @@ class CentralVoiceServer:
         return web.FileResponse(index_path)
 
     async def handle_get_recordings(self, request: web.Request) -> web.Response:
-        recordings = self.audio_store.get_all_recordings()
+        try:
+            limit = int(request.query.get("limit", 50))
+        except ValueError:
+            limit = 50
+        recordings = self.audio_store.get_all_recordings(limit=limit)
         return web.json_response(recordings)
 
     async def handle_get_satellites(self, request: web.Request) -> web.Response:
@@ -183,7 +197,9 @@ class CentralVoiceServer:
                 "noise_tracking_enabled": info.get("noise_tracking_enabled", True),
                 "mic_gain_enabled": info.get("mic_gain_enabled", True),
                 "speaker_volume_enabled": info.get("speaker_volume_enabled", True),
-                "wakenet_threshold": info.get("wakenet_threshold", 0),
+                "wakenet_threshold": info.get("wakenet_threshold", 400),
+                "wakenet_mode": info.get("wakenet_mode", 2),
+                "cooldown_ms": info.get("cooldown_ms", 500),
                 "mic_shift": info.get("mic_shift", 14),
                 "stream_max_ms": info.get("stream_max_ms", 10000),
                 "stream_silence_end_ms": info.get("stream_silence_end_ms", 1500),
@@ -204,7 +220,7 @@ class CentralVoiceServer:
             # Update server state memory
             for k in ["area_id", "mic_gain", "speaker_volume", "led_brightness", "vad_multiplier",
                       "dc_removal_enabled", "noise_tracking_enabled", "mic_gain_enabled",
-                      "speaker_volume_enabled", "wakenet_threshold", "mic_shift", "stream_max_ms",
+                      "speaker_volume_enabled", "wakenet_threshold", "wakenet_mode", "cooldown_ms", "mic_shift", "stream_max_ms",
                       "stream_silence_end_ms", "mic_slot"]:
                 if k in new_config:
                     sat_info[k] = new_config[k]
@@ -409,6 +425,8 @@ class CentralVoiceServer:
                             "mic_gain_enabled": parsed.mic_gain_enabled,
                             "speaker_volume_enabled": parsed.speaker_volume_enabled,
                             "wakenet_threshold": parsed.wakenet_threshold,
+                            "wakenet_mode": parsed.wakenet_mode,
+                            "cooldown_ms": parsed.cooldown_ms,
                             "mic_shift": parsed.mic_shift,
                             "stream_max_ms": parsed.stream_max_ms,
                             "stream_silence_end_ms": parsed.stream_silence_end_ms,
@@ -466,8 +484,27 @@ class CentralVoiceServer:
         app.router.add_get("/", self.handle_root)
         return app
 
+    async def _run_daily_cleanup_loop(self):
+        """Background task that runs daily to purge recordings older than top 50."""
+        logger.info("Daily audio recordings cleanup task initialized (interval: 24h, max recordings: 50).")
+        while True:
+            try:
+                removed = self.audio_store.cleanup_old_recordings(max_keep=50)
+                if removed > 0:
+                    logger.info(f"Daily cleanup task completed: deleted {removed} old recording(s).")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error during daily recordings cleanup: {e}")
+
+            try:
+                await asyncio.sleep(86400)
+            except asyncio.CancelledError:
+                break
+
     async def start(self):
         await self.ha_client.connect()
+        self.cleanup_task = asyncio.create_task(self._run_daily_cleanup_loop())
         app = self.create_app()
         runner = web.AppRunner(app)
         await runner.setup()
@@ -476,10 +513,16 @@ class CentralVoiceServer:
         logger.info("==========================================================")
         logger.info(f"🚀 Central Voice Server & Web UI active on http://localhost:{self.port}")
         logger.info("==========================================================")
-        return AppRunnerAdapter(runner, self.ha_client)
+        return AppRunnerAdapter(runner, self.ha_client, self.cleanup_task)
 
     async def stop(self):
-        """Cleanly shutdown Home Assistant connection and server."""
+        """Cleanly shutdown Home Assistant connection, cleanup task, and server."""
+        if self.cleanup_task and not self.cleanup_task.done():
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
         await self.ha_client.close()
 
 
